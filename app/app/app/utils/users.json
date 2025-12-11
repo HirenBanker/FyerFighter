@@ -1,0 +1,14 @@
+{
+    "Hiren": {
+        "password_hash": "$2b$12$W.6QGfiaS8w5JweARTAGm.HMJyQ3iA85wDcPt0.Q/yHPPgupX.mjq",
+        "encrypted_user_key": "gAAAAABpOp-JPD6zBH7yNrte-zBxRcDsam9ADY9K_yCPbB5MnvJyC8zengsidYCNF1biQP4ZvPCl9FJDq1Y8K-vIRKC6qbzrcERhrxLco0B3EM56WiLdLg_i-EdzkKN2zXKO7ii_rFJM",
+        "is_admin": false,
+        "email": "hiren1banker@gmail.com",
+        "phone": "7600630594",
+        "api_credentials": {
+            "api_id": "gAAAAABpOqAgwvdkEKpbquw8e2Nc_m-NskYycThCdfwkGxJ0-IpOHpswbD1vEGaQzWaQaNxdAzKFqVfdVX45-Xsk66iaoBe34A==",
+            "api_secret": "gAAAAABpOqAgs9Zsi4jc8WlDGbhLrbqnT-qn7UjOvLGPAdelRGClhbVDPMWxVtnLYcae6qPrUY5guBIC1n5waHTXjZFM-P0BpA=="
+        },
+        "fyers_token": "gAAAAABpOqBi9wE_COZ5Aa3APHixOgB6Hy-mpl29jYyVmk7kbaja4pJ_6lTgtmpMlifwrydjPW5hTPyJZlCy842UiXx6IjOliEQrcFGlPt2Ef_GWe6Rk_zDOYQ4CW_TOnuXG09feoLocNSCiDc9ZVem1Vxfti0mfj1ylpOSf2bzalTL4ylHdfKKg_pTbBjpSqe6MQ4IfFEpy2vGAyKFGpJ2wBT1bNJpLVhYfvyqbSrAemyDb6Jf3RHk7RuAHJt1yYOcU_y6VKAich7EVjCxBX31Rbl1g08aU4mWBXxfrukSlRDW_TEwLdxaUruqH2floGZVjqktO6Niyc9AesbsJg5dvbU8Z6rF_tkLG6VNO79BaXnanFPWCOUqnDQ5jAAvrItFS2Yh7f5cQXp9uE0koOf5naZX6ArWvV_d8EaI2ms9wsLapTL_YBXzWoRnUEcjSu4jMP8sTqhdCH9xCVS2qhmswHU2MXIKgcTp1nN8Nm4Cdjkyk7vacoSg6YxLrMgmckrd6gPRbcfcTaaRjnWv57u51Ak_vmsOSJJrjqkpn0VxtVcC6YypLAgU19TzT-5APiLYmynS3r_EGas8Lbtyx-GYQf8mow2BjcT7jnBUv6lmgB6k4Aypoowidvb7VfRfz7zaesijd2-67LPw-tPg72F6GCwByq1x5qBhDasBjyhbmlSohzCFlI1W5Fht2kTu_GQoicGNe4LvUJF_hf4k1jykYqrxD9UBwNf5UfNWwkcwdH4GJgkG1XoUiHB7wvsrOg9l6tE_fdTLSAfTirWfM_oKgoXYWaWkIbaIOXml93K3I-tQMSDqGBhM3VsiPQw2MmiqKCaydoDkCkzOUvtDhRssR6cSGuCH8ADhDEnHo8kY3tE_VSQagAUKBF_FMBDipBaVVDxgM4jnRf9J6qHnATNWelaEMhtDFZYaDpyEXvih5AFs4Rm3y2UM2n0_Hbblky_EshQoE2rDp"
+    }
+}
