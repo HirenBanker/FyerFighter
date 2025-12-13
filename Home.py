@@ -358,4 +358,3 @@ if st.session_state.authenticated_user:
             initialize_fyers_client()
 
 show_dashboard()
-
