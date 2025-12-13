@@ -12,7 +12,7 @@ sys.path.insert(0, project_root)
 
 from common.data_downloader import download_data_fyers
 from common.indicators import heikin_ashi, ema_lows, ema_highs, calculate_tsi
-from common.utils import to_local
+from common.utils import to_local, export_to_excel
 from ema_tsi.strategy import backtest_strategy, should_enter_trade, should_exit_trade
 
 def initialize_trading_state():
@@ -38,45 +38,6 @@ def get_latest_price(fyers, ticker):
         return None
     except Exception as e:
         return None
-
-def export_trades(ticker, trade_log):
-    if not trade_log:
-        return False
-    
-    try:
-        df_new = pd.DataFrame(
-            trade_log,
-            columns=["Timestamp", "Signal", "Price", "Quantity", "PnL"]
-        )
-        
-        df_new['Date'] = pd.to_datetime(df_new['Timestamp']).dt.date
-        df_new['Time'] = pd.to_datetime(df_new['Timestamp']).dt.time
-        df_new = df_new.drop('Timestamp', axis=1)
-        df_new = df_new[['Date', 'Time', 'Signal', 'Price', 'Quantity', 'PnL']]
-        df_new['Ticker'] = ticker
-        
-        file_path = os.path.join(
-            os.path.expanduser("~"),
-            "Desktop",
-            "EMA_TSI_Trades.xlsx"
-        )
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
-        
-        if os.path.exists(file_path):
-            df_existing = pd.read_excel(file_path, parse_dates=['Date'])
-            df_existing['Date'] = pd.to_datetime(df_existing['Date']).dt.date
-            df_to_save = pd.concat([df_existing, df_new], ignore_index=True)
-        else:
-            df_to_save = df_new
-        
-        with pd.ExcelWriter(file_path, engine='openpyxl', datetime_format='YYYY-MM-DD') as writer:
-            df_to_save.to_excel(writer, index=False)
-        
-        st.session_state.ema_tsi_trade_log = []
-        return True
-    except Exception as e:
-        st.error(f"Error exporting trades: {e}")
-        return False
 
 def get_condition_values(fyers, ticker, live_price, interval, ema_period=5, tsi_r_period=30):
     """Get all condition values for display in GUI"""
@@ -185,7 +146,6 @@ def show_trade():
                     pnl = (price - st.session_state.ema_tsi_entry_price) * st.session_state.ema_tsi_qty
                     st.session_state.ema_tsi_trade_log.append([dt, "SELL", price, st.session_state.ema_tsi_qty, round(pnl, 2)])
                     st.session_state.ema_tsi_position = 0
-            export_trades(symbol.upper(), st.session_state.ema_tsi_trade_log)
             st.rerun()
         
         trading_status = "Running"
@@ -223,7 +183,6 @@ def show_trade():
                         st.session_state.ema_tsi_qty = qty
                         st.session_state.ema_tsi_position = 1
                         st.session_state.ema_tsi_trade_log.append([dt, "BUY", price, qty, 0.0])
-                        export_trades(symbol.upper(), st.session_state.ema_tsi_trade_log)
                         status_placeholder.success(f"BUY executed at ₹{price:.2f}")
                         entry_placeholder.metric("Entry Price", f"₹{st.session_state.ema_tsi_entry_price:.2f}", delta=f"@ {st.session_state.ema_tsi_entry_time}")
                     else:
@@ -232,7 +191,6 @@ def show_trade():
                     if should_exit_trade(st.session_state.fyers_client, symbol.upper(), st.session_state.ema_tsi_entry_price, stoploss, target, price, interval, ema_period, tsi_r_period):
                         pnl = (price - st.session_state.ema_tsi_entry_price) * qty
                         st.session_state.ema_tsi_trade_log.append([dt, "SELL", price, qty, round(pnl, 2)])
-                        export_trades(symbol.upper(), st.session_state.ema_tsi_trade_log)
                         pnl_placeholder.metric("P&L", f"₹{pnl:.2f}", delta=f"{((pnl / (st.session_state.ema_tsi_entry_price * qty)) * 100):.2f}%")
                         status_placeholder.success(f"SELL executed at ₹{price:.2f} | P&L: ₹{pnl:.2f}")
                         st.session_state.ema_tsi_position = 0
@@ -275,6 +233,15 @@ def show_trade():
         if st.button("Start Trading", key="ema_tsi_start"):
             st.session_state.ema_tsi_running = True
             st.rerun()
+        
+        if st.session_state.ema_tsi_trade_log:
+            st.markdown("### Session Trade Log")
+            log_df = pd.DataFrame(
+                st.session_state.ema_tsi_trade_log,
+                columns=["Timestamp", "Signal", "Price", "Quantity", "PnL"]
+            )
+            st.dataframe(log_df)
+
 
 def show_backtest():
     st.subheader("EMA TSI Backtest")
@@ -294,8 +261,8 @@ def show_backtest():
     with col2:
         ema_period = st.number_input("EMA Period", min_value=1, value=5, step=1, key="ema_tsi_bt_ema_period")
         tsi_r_period = st.number_input("TSI R Period", min_value=1, value=30, step=1, key="ema_tsi_bt_tsi_r_period")
-        stoploss = st.number_input("Stoploss (%)", min_value=0.1, value=5.0, key="ema_tsi_bt_stoploss")
-        target = st.number_input("Target (%)", min_value=0.1, value=10.0, key="ema_tsi_bt_target")
+        stoploss = st.number_input("Stoploss (%)", min_value=0.1, value=2.0, key="ema_tsi_bt_stoploss")
+        target = st.number_input("Target (%)", min_value=0.1, value=5.0, key="ema_tsi_bt_target")
         initial_capital = st.number_input("Initial Capital", min_value=1000, value=10000, step=1000, key="ema_tsi_bt_capital")
     
     if st.button("Run Backtest", key="ema_tsi_run_backtest"):

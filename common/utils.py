@@ -2,7 +2,14 @@
 import os
 import json
 import pandas as pd
-from tkinter import messagebox
+import io
+
+def get_download_path():
+    """Returns the default downloads path for linux or windows"""
+    if os.name == 'nt':
+        return os.path.join(os.path.expanduser('~'), 'Downloads')
+    else:
+        return os.path.join(os.path.expanduser('~'), 'downloads')
 
 def to_local(dt):
     # Ensure dt is timezone-aware if needed
@@ -11,9 +18,13 @@ def to_local(dt):
     return dt.tz_convert("Asia/Kolkata")
 
 def export_to_excel(trade_history_df):
-    desktop = os.path.join(os.path.expanduser("~"), "Desktop")
-    file_path = os.path.join(desktop, "Trade_Details.xlsx")
-    trade_history_df.to_excel(file_path, index=False)
-    print(f"Trade details exported to {file_path}")
-    messagebox.showinfo("Success", f"Trade details exported to {file_path}")
+    """
+    Returns a BytesIO object containing the Excel file.
+    This is designed to be used with st.download_button.
+    """
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        trade_history_df.to_excel(writer, index=False)
+    output.seek(0)
+    return output
     

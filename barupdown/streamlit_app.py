@@ -12,7 +12,7 @@ sys.path.insert(0, project_root)
 
 from common.data_downloader import download_data_fyers
 from common.indicators import heikin_ashi
-from common.utils import to_local
+from common.utils import to_local, get_download_path, export_to_excel
 from barupdown.Hr_strategy import backtest_strategy, should_enter_trade, should_exit_trade, get_condition_values
 
 def initialize_trading_state():
@@ -40,45 +40,6 @@ def get_latest_price(fyers, ticker):
         return None
     except Exception as e:
         return None
-
-def export_trades(ticker, trade_log):
-    if not trade_log:
-        return False
-    
-    try:
-        df_new = pd.DataFrame(
-            trade_log,
-            columns=["Timestamp", "Signal", "Price", "Quantity", "PnL"]
-        )
-        
-        df_new['Date'] = pd.to_datetime(df_new['Timestamp']).dt.date
-        df_new['Time'] = pd.to_datetime(df_new['Timestamp']).dt.time
-        df_new = df_new.drop('Timestamp', axis=1)
-        df_new = df_new[['Date', 'Time', 'Signal', 'Price', 'Quantity', 'PnL']]
-        df_new['Ticker'] = ticker
-        
-        file_path = os.path.join(
-            os.path.expanduser("~"),
-            "Desktop",
-            "BarUpDown_Trades.xlsx"
-        )
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
-        
-        if os.path.exists(file_path):
-            df_existing = pd.read_excel(file_path, parse_dates=['Date'])
-            df_existing['Date'] = pd.to_datetime(df_existing['Date']).dt.date
-            df_to_save = pd.concat([df_existing, df_new], ignore_index=True)
-        else:
-            df_to_save = df_new
-        
-        with pd.ExcelWriter(file_path, engine='openpyxl', datetime_format='YYYY-MM-DD') as writer:
-            df_to_save.to_excel(writer, index=False)
-        
-        st.session_state.barupdown_trade_log = []
-        return True
-    except Exception as e:
-        st.error(f"Error exporting trades: {e}")
-        return False
 
 def show_barupdown():
     st.subheader("Bar Up Down Strategy")
@@ -121,7 +82,6 @@ def show_barupdown():
                     pnl = (price - st.session_state.barupdown_entry_price) * st.session_state.barupdown_qty
                     st.session_state.barupdown_trade_log.append([dt, "SELL", price, st.session_state.barupdown_qty, round(pnl, 2)])
                     st.session_state.barupdown_position = 0
-            export_trades(symbol.upper(), st.session_state.barupdown_trade_log)
             st.rerun()
         
         trading_status = "Running"
@@ -159,7 +119,6 @@ def show_barupdown():
                         st.session_state.barupdown_qty = qty
                         st.session_state.barupdown_position = 1
                         st.session_state.barupdown_trade_log.append([dt, "BUY", price, qty, 0.0])
-                        export_trades(symbol.upper(), st.session_state.barupdown_trade_log)
                         status_placeholder.success(f"BUY executed at ₹{price:.2f}")
                         entry_placeholder.metric("Entry Price", f"₹{st.session_state.barupdown_entry_price:.2f}", delta=f"@ {st.session_state.barupdown_entry_time}")
                     else:
@@ -168,7 +127,6 @@ def show_barupdown():
                     if should_exit_trade(st.session_state.fyers_client, symbol.upper(), st.session_state.barupdown_entry_price, stoploss, target, price, interval):
                         pnl = (price - st.session_state.barupdown_entry_price) * qty
                         st.session_state.barupdown_trade_log.append([dt, "SELL", price, qty, round(pnl, 2)])
-                        export_trades(symbol.upper(), st.session_state.barupdown_trade_log)
                         pnl_placeholder.metric("P&L", f"₹{pnl:.2f}", delta=f"{((pnl / (st.session_state.barupdown_entry_price * qty)) * 100):.2f}%")
                         status_placeholder.success(f"SELL executed at ₹{price:.2f} | P&L: ₹{pnl:.2f}")
                         st.session_state.barupdown_position = 0
@@ -208,6 +166,19 @@ def show_barupdown():
         if st.button("Start Trading", key="bu_start"):
             st.session_state.barupdown_running = True
             st.rerun()
+        
+        # Add a section to view and download the trade log
+        if st.session_state.barupdown_trade_log:
+            st.markdown("### Session Trade Log")
+            log_df = pd.DataFrame(
+                st.session_state.barupdown_trade_log,
+                columns=["Timestamp", "Signal", "Price", "Quantity", "PnL"]
+            )
+            st.dataframe(log_df)
+
+
+
+
 
 def show_backtest():
     st.subheader("Bar Up Down Backtest")
@@ -225,8 +196,8 @@ def show_backtest():
         interval = st.selectbox("Interval", ["1m", "5m", "15m", "1h", "1d"], key="bu_bt_interval")
     
     with col2:
-        stoploss = st.number_input("Stoploss (%)", min_value=0.1, value=5.0, key="bu_bt_stoploss")
-        target = st.number_input("Target (%)", min_value=0.1, value=10.0, key="bu_bt_target")
+        stoploss = st.number_input("Stoploss (%)", min_value=0.1, value=2.0, key="bu_bt_stoploss")
+        target = st.number_input("Target (%)", min_value=0.1, value=5.0, key="bu_bt_target")
         initial_capital = st.number_input("Initial Capital", min_value=1000, value=10000, step=1000, key="bu_bt_capital")
     
     if st.button("Run Backtest"):

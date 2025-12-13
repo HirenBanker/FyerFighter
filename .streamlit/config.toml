@@ -12,11 +12,9 @@ toolbarMode = "viewer"
 [server]
 maxUploadSize = 200
 enableXsrfProtection = true
-enableCORS = false
 
 [logger]
 level = "info"
 
 [ui]
 hideTopBar = false
-hideSidebarNav = false
