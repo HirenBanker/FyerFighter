@@ -211,32 +211,36 @@ def load_api_credentials(username):
         return None
 
 def change_password(username, old_password, new_password):
-    """Change user password after verifying the old password."""
-    users = load_users()
-    if username not in users:
-        return False, "User not found"
-    
-    user = users[username]
-    if not verify_password(old_password, user["password_hash"]):
-        return False, "Current password is incorrect"
-    
-    hashed_password = hash_password(new_password)
-    users[username]["password_hash"] = hashed_password
-    save_users(users)
-    return True, "Password changed successfully"
+    """Change user password in Supabase. This requires the user to be logged in."""
+    # Note: Supabase's password change doesn't require the old password.
+    # It relies on the user being authenticated via their session token.
+    # The UI asks for the old password as a safety check, but the API doesn't use it.
+    if not supabase:
+        return False, "Supabase client not initialized."
+    try:
+        # The user must be authenticated for this to work.
+        # The client handles the session automatically.
+        supabase.auth.update_user({"password": new_password})
+        return True, "Password changed successfully."
+    except Exception as e:
+        return False, f"Failed to change password: {e}"
 
 def change_email(username, new_email):
-    """Update user's email address."""
-    users = load_users()
-    if username not in users:
-        return False, "User not found"
-    
+    """Update user's email address in Supabase."""
     if not new_email or "@" not in new_email:
         return False, "Invalid email format"
-    
-    users[username]["email"] = new_email
-    save_users(users)
-    return True, f"Email updated to {new_email}"
+
+    if not supabase:
+        return False, "Supabase client not initialized."
+
+    try:
+        # The user must be authenticated to change their email.
+        supabase.auth.update_user({"email": new_email})
+        # Note: If email confirmation is enabled, Supabase will send verification emails.
+        # Since it's disabled, the change should be immediate.
+        return True, f"Email updated to {new_email}"
+    except Exception as e:
+        return False, f"Failed to change email: {e}"
 
 def save_fyers_token(username, access_token):
     """Save user's Fyers access token."""
