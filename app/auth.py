@@ -105,13 +105,12 @@ def create_user(email: str, password: str, data: dict):
 def authenticate_user(username, password):
     """Authenticate a user"""
     try:
-        # Supabase uses email to sign in. We first get the user's profile to find their email.
-        # The login form in Home.py passes the email, but we should handle username for consistency.
+        # Supabase uses email to sign in. We get the user's profile to find their email from the username.
         profile = get_user_profile(username) # This can find by username or email
         if not profile:
-            # If profile is not found, it's possible the user entered their email directly
-            # and we treat the 'username' parameter as the email.
-            user_email = username
+            # If no profile is found by username, authentication will fail.
+            # We could try to treat 'username' as an email, but for consistency we require username.
+            return None, f"Authentication failed: User '{username}' not found."
         else:
             user_email = profile.get('email')
 
