@@ -72,6 +72,30 @@ def create_user(email: str, password: str, data: dict):
         })
 
         if res.user:
+            # Explicitly create profile if it doesn't exist (in case trigger is missing)
+            # We use the admin client if available to bypass RLS during profile creation if needed,
+            # though usually the user can insert their own profile.
+            client = get_db_client()
+            
+            # Check if profile exists
+            try:
+                profile_check = client.table("profiles").select("user_id").eq("user_id", res.user.id).execute()
+                if not profile_check.data:
+                    # Create profile manually
+                    profile_data = {
+                        "user_id": res.user.id,
+                        "username": data.get('username'),
+                        "email": email,
+                        "phone": data.get('phone'),
+                        "encrypted_user_key": encrypted_user_key,
+                        "role": "user" # Default role
+                    }
+                    client.table("profiles").insert(profile_data).execute()
+            except Exception as profile_error:
+                print(f"Warning: Could not create profile manually: {profile_error}")
+                # We don't fail the registration here, as the trigger might have worked or it might be a permission issue.
+                # But if the trigger failed AND this failed, the user will have issues logging in.
+
             return True, "Registration successful! Please check your email to verify your account."
         else:
             return False, "Registration failed. No user object was returned by the server."
@@ -81,9 +105,17 @@ def create_user(email: str, password: str, data: dict):
 def authenticate_user(username, password):
     """Authenticate a user"""
     try:
-        # Supabase uses email to sign in. 
-        # We assume 'username' passed here is the email, or we rely on the user entering email.
-        res = supabase.auth.sign_in_with_password({"email": username, "password": password})
+        # Supabase uses email to sign in. We first get the user's profile to find their email.
+        # The login form in Home.py passes the email, but we should handle username for consistency.
+        profile = get_user_profile(username) # This can find by username or email
+        if not profile:
+            # If profile is not found, it's possible the user entered their email directly
+            # and we treat the 'username' parameter as the email.
+            user_email = username
+        else:
+            user_email = profile.get('email')
+
+        res = supabase.auth.sign_in_with_password({"email": user_email, "password": password})
         return res.session, "Authentication successful"
     except Exception as e:
         return None, f"Authentication failed: {e}"

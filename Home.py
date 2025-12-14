@@ -296,8 +296,8 @@ def show_dashboard():
                                 success, message = auth.change_password(st.session_state.authenticated_user, old_password, new_password)
                                 if success:
                                     st.success(message)
-                                else:
-                                    st.error(message)
+                                    st.session_state.supabase_session = None # Force re-login
+                                st.error(message)
                 
                 elif account_option == "Change Email":
                     with st.form("change_email_form"):
