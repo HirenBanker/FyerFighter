@@ -1,33 +1,33 @@
 import json
 import os
-from pathlib import Path
-import secrets
 import bcrypt
 from cryptography.fernet import Fernet
 from dotenv import load_dotenv
+from supabase import create_client
 
 load_dotenv()
 
-import sys
-sys.path.append(str(Path(__file__).parent.parent))
-
-USE_SUPABASE = os.getenv("USE_SUPABASE", "false").lower() == "true"
-USERS_FILE = os.getenv("USERS_FILE_PATH", "app/app/utils/users.json")
+# Configuration
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
 ENCRYPTION_MASTER_KEY = os.getenv("ENCRYPTION_MASTER_KEY")
 
 if not ENCRYPTION_MASTER_KEY:
     raise ValueError("ENCRYPTION_MASTER_KEY environment variable not set. Please set it in .env or Render environment variables.")
 
-if USE_SUPABASE:
-    from supabase import create_client
-    SUPABASE_URL = os.getenv("SUPABASE_URL")
-    SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-    if SUPABASE_URL and SUPABASE_KEY:
-        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-    else:
-        supabase = None
-else:
-    supabase = None
+if not SUPABASE_URL or not SUPABASE_KEY:
+    raise ValueError("SUPABASE_URL and SUPABASE_KEY environment variables must be set.")
+
+# Initialize clients
+# Public client (anon key)
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+# Admin client (service role key) - used for DB operations to bypass RLS if needed
+supabase_admin = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY) if SUPABASE_SERVICE_KEY else None
+
+def get_db_client():
+    """Returns the best available client for DB operations."""
+    return supabase_admin if supabase_admin else supabase
 
 def generate_user_encryption_key():
     """Generates a unique encryption key for a user."""
@@ -53,92 +53,21 @@ def decrypt_user_data(encrypted_data, user_key):
     f = Fernet(user_key.encode())
     return f.decrypt(encrypted_data.encode()).decode()
 
-def load_users():
-    """Load users from JSON file or Supabase."""
-    if USE_SUPABASE and supabase:
-        try:
-            response = supabase.table("users").select("*").execute()
-            users = {}
-            for user in response.data:
-                users[user['username']] = {
-                    "password_hash": user['password_hash'],
-                    "encrypted_user_key": user['encrypted_user_key'],
-                    "is_admin": user['is_admin'],
-                    "email": user.get('email'),
-                    "phone": user.get('phone'),
-                    "api_credentials": json.loads(user['api_credentials']) if user.get('api_credentials') else None,
-                    "fyers_token": user.get('fyers_token')
-                }
-            return users
-        except Exception as e:
-            print(f"Error loading users from Supabase: {e}")
-            return {}
-    else:
-        if os.path.exists(USERS_FILE):
-            with open(USERS_FILE, 'r') as f:
-                return json.load(f)
-        return {}
-
-def save_users(users):
-    """Save users to JSON file or Supabase."""
-    if USE_SUPABASE and supabase:
-        try:
-            for username, user_data in users.items():
-                api_creds = json.dumps(user_data['api_credentials']) if user_data.get('api_credentials') else None
-                
-                existing = supabase.table("users").select("*").eq("username", username).execute()
-                
-                if existing.data:
-                    supabase.table("users").update({
-                        "password_hash": user_data['password_hash'],
-                        "encrypted_user_key": user_data['encrypted_user_key'],
-                        "is_admin": user_data['is_admin'],
-                        "email": user_data.get('email'),
-                        "phone": user_data.get('phone'),
-                        "api_credentials": api_creds,
-                        "fyers_token": user_data.get('fyers_token')
-                    }).eq("username", username).execute()
-                else:
-                    supabase.table("users").insert({
-                        "username": username,
-                        "password_hash": user_data['password_hash'],
-                        "encrypted_user_key": user_data['encrypted_user_key'],
-                        "is_admin": user_data['is_admin'],
-                        "email": user_data.get('email'),
-                        "phone": user_data.get('phone'),
-                        "api_credentials": api_creds,
-                        "fyers_token": user_data.get('fyers_token')
-                    }).execute()
-        except Exception as e:
-            print(f"Error saving users to Supabase: {e}")
-    else:
-        os.makedirs(os.path.dirname(USERS_FILE), exist_ok=True)
-        with open(USERS_FILE, 'w') as f:
-            json.dump(users, f, indent=4)
-
-def hash_password(password):
-    """Hash password using bcrypt."""
-    return bcrypt.hashpw(password.encode(), bcrypt.gensalt(rounds=12)).decode()
-
-def verify_password(password, hashed_password):
-    """Verify password against bcrypt hash."""
-    try:
-        return bcrypt.checkpw(password.encode(), hashed_password.encode())
-    except Exception:
-        return False
-
 def create_user(email: str, password: str, data: dict):
     """Creates a new user in Supabase Auth and their profile."""
-    if not supabase:
-        return False, "Supabase client not initialized. Check environment variables."
-
     try:
-        # The 'data' dict from Home.py is passed into the 'options' of sign_up
+        # Generate and encrypt user key
+        user_key = generate_user_encryption_key()
+        encrypted_user_key = encrypt_with_master_key(user_key)
+        
+        # Add encrypted key to user metadata so it can be stored in profile
+        data['encrypted_user_key'] = encrypted_user_key
+        
         res = supabase.auth.sign_up({
             "email": email,
             "password": password,
             "options": {
-                "data": data  # This passes username and phone to the profile
+                "data": data
             }
         })
 
@@ -151,36 +80,60 @@ def create_user(email: str, password: str, data: dict):
 
 def authenticate_user(username, password):
     """Authenticate a user"""
-    if not supabase:
-        return None, "Supabase client not initialized. Check environment variables."
-
     try:
-        # Supabase uses email to sign in, not username.
-        # We will use the 'username' field from the login form as the email.
+        # Supabase uses email to sign in. 
+        # We assume 'username' passed here is the email, or we rely on the user entering email.
         res = supabase.auth.sign_in_with_password({"email": username, "password": password})
-        # On success, res contains the user session.
         return res.session, "Authentication successful"
     except Exception as e:
         return None, f"Authentication failed: {e}"
 
+def get_user_profile(username):
+    """Fetch user profile by username or email."""
+    client = get_db_client()
+    try:
+        # Try to find by username first
+        response = client.table("profiles").select("*").eq("username", username).execute()
+        if response.data:
+            return response.data[0]
+        
+        # Fallback: try to find by email
+        response = client.table("profiles").select("*").eq("email", username).execute()
+        if response.data:
+            return response.data[0]
+            
+        return None
+    except Exception as e:
+        print(f"Error fetching profile for {username}: {e}")
+        return None
+
 def save_api_credentials(username, api_id, api_secret):
     """Encrypt and save user's API credentials."""
-    users = load_users()
-    if username not in users:
+    profile = get_user_profile(username)
+    if not profile:
         return False, "User not found"
     
     try:
-        encrypted_user_key = users[username]["encrypted_user_key"]
+        encrypted_user_key = profile.get("encrypted_user_key")
+        if not encrypted_user_key:
+             return False, "Encryption key not found for user."
+
         user_key = decrypt_with_master_key(encrypted_user_key)
         
         encrypted_api_id = encrypt_user_data(api_id, user_key)
         encrypted_api_secret = encrypt_user_data(api_secret, user_key)
         
-        users[username]["api_credentials"] = {
+        api_credentials = {
             "api_id": encrypted_api_id,
             "api_secret": encrypted_api_secret
         }
-        save_users(users)
+        
+        client = get_db_client()
+        # Store as JSON string to be compatible with potential text column or JSONB
+        client.table("profiles").update({
+            "api_credentials": json.dumps(api_credentials)
+        }).eq("username", profile['username']).execute()
+        
         return True, "API credentials saved successfully."
     except Exception as e:
         print(f"Error saving credentials: {e}")
@@ -188,20 +141,29 @@ def save_api_credentials(username, api_id, api_secret):
 
 def load_api_credentials(username):
     """Load and decrypt user's API credentials."""
-    users = load_users()
-    if username not in users:
+    profile = get_user_profile(username)
+    if not profile:
         return None
     
-    user_data = users[username]
-    if not user_data.get("api_credentials"):
+    api_creds_raw = profile.get("api_credentials")
+    if not api_creds_raw:
         return None
     
     try:
-        encrypted_user_key = user_data["encrypted_user_key"]
+        # Handle both string (JSON) and dict (JSONB)
+        if isinstance(api_creds_raw, str):
+            api_creds = json.loads(api_creds_raw)
+        else:
+            api_creds = api_creds_raw
+
+        encrypted_user_key = profile.get("encrypted_user_key")
+        if not encrypted_user_key:
+            return None
+
         user_key = decrypt_with_master_key(encrypted_user_key)
         
-        encrypted_api_id = user_data["api_credentials"]["api_id"]
-        encrypted_api_secret = user_data["api_credentials"]["api_secret"]
+        encrypted_api_id = api_creds["api_id"]
+        encrypted_api_secret = api_creds["api_secret"]
         
         api_id = decrypt_user_data(encrypted_api_id, user_key)
         api_secret = decrypt_user_data(encrypted_api_secret, user_key)
@@ -211,45 +173,65 @@ def load_api_credentials(username):
         return None
 
 def change_password(username, old_password, new_password):
-    """Change user password in Supabase. This requires the user to be logged in."""
-    # Note: Supabase's password change doesn't require the old password.
-    # It relies on the user being authenticated via their session token.
-    # The UI asks for the old password as a safety check, but the API doesn't use it.
-    if not supabase:
-        return False, "Supabase client not initialized."
-    try:
-        # The user must be authenticated for this to work.
-        # The client handles the session automatically.
-        supabase.auth.update_user({"password": new_password})
-        return True, "Password changed successfully."
-    except Exception as e:
-        return False, f"Failed to change password: {e}"
+    """Change user password in Supabase."""
+    # Note: This requires the user to be authenticated. 
+    # Since we don't have the session here, this might fail if using anon key.
+    # Ideally, Home.py should pass the session or we use admin key (which is dangerous for password change without verification).
+    # However, Supabase Admin API allows updating user password.
+    
+    if supabase_admin:
+        # Admin update - bypasses old password check (handled by UI or trust)
+        try:
+            profile = get_user_profile(username)
+            if not profile:
+                return False, "User not found"
+            
+            user_id = profile.get('user_id') # Assuming 'user_id' is in profiles
+            if not user_id:
+                 # Try to get user_id from auth.users? Admin can do that.
+                 # But we can't easily query auth.users by username.
+                 return False, "User ID not found in profile."
+
+            supabase_admin.auth.admin.update_user_by_id(user_id, {"password": new_password})
+            return True, "Password changed successfully."
+        except Exception as e:
+            return False, f"Failed to change password: {e}"
+    else:
+        return False, "Admin client not initialized. Cannot change password."
 
 def change_email(username, new_email):
     """Update user's email address in Supabase."""
     if not new_email or "@" not in new_email:
         return False, "Invalid email format"
 
-    if not supabase:
-        return False, "Supabase client not initialized."
+    if supabase_admin:
+        try:
+            profile = get_user_profile(username)
+            if not profile:
+                return False, "User not found"
+            
+            user_id = profile.get('user_id')
+            if not user_id:
+                 return False, "User ID not found in profile."
 
-    try:
-        # The user must be authenticated to change their email.
-        supabase.auth.update_user({"email": new_email})
-        # Note: If email confirmation is enabled, Supabase will send verification emails.
-        # Since it's disabled, the change should be immediate.
-        return True, f"Email updated to {new_email}"
-    except Exception as e:
-        return False, f"Failed to change email: {e}"
+            supabase_admin.auth.admin.update_user_by_id(user_id, {"email": new_email})
+            return True, f"Email updated to {new_email}"
+        except Exception as e:
+            return False, f"Failed to change email: {e}"
+    else:
+        return False, "Admin client not initialized. Cannot change email."
 
 def save_fyers_token(username, access_token):
     """Save user's Fyers access token."""
-    users = load_users()
-    if username not in users or "encrypted_user_key" not in users[username]:
-        return False, "User not found or user has no encryption key."
+    profile = get_user_profile(username)
+    if not profile:
+        return False, "User not found"
 
     try:
-        encrypted_user_key = users[username]["encrypted_user_key"]
+        encrypted_user_key = profile.get("encrypted_user_key")
+        if not encrypted_user_key:
+            return False, "Encryption key not found."
+
         user_key = decrypt_with_master_key(encrypted_user_key)
         
         if access_token:
@@ -257,8 +239,11 @@ def save_fyers_token(username, access_token):
         else:
             encrypted_token = None
             
-        users[username]["fyers_token"] = encrypted_token
-        save_users(users)
+        client = get_db_client()
+        client.table("profiles").update({
+            "fyers_token": encrypted_token
+        }).eq("username", profile['username']).execute()
+        
         return True, "Token saved successfully"
     except Exception as e:
         print(f"Error encrypting or saving token: {e}")
@@ -266,16 +251,16 @@ def save_fyers_token(username, access_token):
 
 def load_fyers_token(username):
     """Load user's Fyers access token."""
-    users = load_users()
-    if username not in users or "encrypted_user_key" not in users[username]:
+    profile = get_user_profile(username)
+    if not profile:
         return None
     
-    encrypted_token = users[username].get("fyers_token")
+    encrypted_token = profile.get("fyers_token")
     if not encrypted_token:
         return None
 
     try:
-        encrypted_user_key = users[username]["encrypted_user_key"]
+        encrypted_user_key = profile.get("encrypted_user_key")
         user_key = decrypt_with_master_key(encrypted_user_key)
         return decrypt_user_data(encrypted_token, user_key)
     except Exception as e:
@@ -284,10 +269,15 @@ def load_fyers_token(username):
 
 def delete_fyers_token(username):
     """Delete user's Fyers access token."""
-    users = load_users()
-    if username not in users:
+    profile = get_user_profile(username)
+    if not profile:
         return False, "User not found"
     
-    users[username]["fyers_token"] = None
-    save_users(users)
-    return True, "Token deleted successfully"
+    try:
+        client = get_db_client()
+        client.table("profiles").update({
+            "fyers_token": None
+        }).eq("username", profile['username']).execute()
+        return True, "Token deleted successfully"
+    except Exception as e:
+        return False, f"Failed to delete token: {e}"

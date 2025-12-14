@@ -15,7 +15,7 @@ def init_supabase_tables():
     client = get_supabase_client()
     
     try:
-        client.table("users").select("*").limit(1).execute()
+        client.table("profiles").select("*").limit(1).execute()
         return True
     except Exception as e:
         print(f"Supabase tables not initialized: {e}")

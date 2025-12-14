@@ -3,6 +3,8 @@ import datetime
 import re
 import os
 import sys
+import importlib
+import pandas as pd
 # Add the project root to the Python path BEFORE imports
 project_root = os.path.dirname(os.path.abspath(__file__))
 if project_root not in sys.path:
@@ -10,8 +12,6 @@ if project_root not in sys.path:
 
 from app import auth
 from common import login
-import importlib
-import pandas as pd
 from supabase import create_client, Client, PostgrestAPIError
 from dotenv import load_dotenv
 
@@ -373,6 +373,7 @@ def show_dashboard():
                                 success, message = auth.create_user(reg_email, reg_password, data=user_metadata)
                                 if success:
                                     st.success(message)
+                                    st.rerun()
                                 else:
                                     st.error(message)
             
