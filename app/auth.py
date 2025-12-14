@@ -127,27 +127,27 @@ def verify_password(password, hashed_password):
     except Exception:
         return False
 
-def create_user(username, password, is_admin=False, email=None, phone=None):
-    """Create a new user"""
-    users = load_users()
-    if username in users:
-        return False, "Username already exists"
-    
-    hashed_password = hash_password(password)
-    user_encryption_key = generate_user_encryption_key()
-    encrypted_user_key = encrypt_with_master_key(user_encryption_key)
-    
-    users[username] = {
-        "password_hash": hashed_password,
-        "encrypted_user_key": encrypted_user_key,
-        "is_admin": is_admin,
-        "email": email,
-        "phone": phone,
-        "api_credentials": None,
-        "fyers_token": None
-    }
-    save_users(users)
-    return True, "User created successfully"
+def create_user(email: str, password: str, data: dict):
+    """Creates a new user in Supabase Auth and their profile."""
+    if not supabase:
+        return False, "Supabase client not initialized. Check environment variables."
+
+    try:
+        # The 'data' dict from Home.py is passed into the 'options' of sign_up
+        res = supabase.auth.sign_up({
+            "email": email,
+            "password": password,
+            "options": {
+                "data": data  # This passes username and phone to the profile
+            }
+        })
+
+        if res.user:
+            return True, "Registration successful! Please check your email to verify your account."
+        else:
+            return False, "Registration failed. No user object was returned by the server."
+    except Exception as e:
+        return False, f"An error occurred during registration: {e}"
 
 def authenticate_user(username, password):
     """Authenticate a user"""
