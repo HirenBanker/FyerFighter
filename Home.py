@@ -331,14 +331,20 @@ def show_dashboard():
                 
                 with tab1:
                     with st.form("login_form"):
-                        login_username = st.text_input("Username")
+                        login_email = st.text_input("Email")
                         login_password = st.text_input("Password", type="password")
                         login_submitted = st.form_submit_button("Login")
                         
                         if login_submitted:
-                            session, message = auth.authenticate_user(login_username, login_password)
+                            session, message = auth.authenticate_user(login_email, login_password)
                             if session:
-                                st.session_state.authenticated_user = login_username
+                                # After successful login, get the user's profile to display their username
+                                user_profile = supabase_admin.table('profiles').select('username').eq('user_id', session.user.id).single().execute()
+                                if user_profile.data:
+                                    st.session_state.authenticated_user = user_profile.data.get('username', login_email)
+                                else:
+                                    # Fallback to email if profile is not found for some reason
+                                    st.session_state.authenticated_user = login_email
                                 # Store the Supabase session object
                                 st.session_state.supabase_session = session
                                 st.success("Login successful!")
