@@ -72,30 +72,25 @@ def create_user(email: str, password: str, data: dict):
         })
 
         if res.user:
-            # Explicitly create profile if it doesn't exist (in case trigger is missing)
-            # We use the admin client if available to bypass RLS during profile creation if needed,
-            # though usually the user can insert their own profile.
+            # After creating the user in auth.users, we must create their public profile
+            # in the 'profiles' table. We use the admin client to ensure this succeeds.
             client = get_db_client()
-            
-            # Check if profile exists
             try:
-                profile_check = client.table("profiles").select("user_id").eq("user_id", res.user.id).execute()
-                if not profile_check.data:
-                    # Create profile manually
-                    profile_data = {
-                        "user_id": res.user.id,
-                        "username": data.get('username'),
-                        "email": email,
-                        "phone": data.get('phone'),
-                        "encrypted_user_key": encrypted_user_key,
-                        "role": "user" # Default role
-                    }
-                    client.table("profiles").insert(profile_data).execute()
+                profile_data = {
+                    "user_id": res.user.id,
+                    "username": data.get('username'),
+                    "email": email,
+                    "phone": data.get('phone'),
+                    "encrypted_user_key": encrypted_user_key,
+                    "role": "user" # Default role
+                }
+                client.table("profiles").insert(profile_data).execute()
             except Exception as profile_error:
-                print(f"Warning: Could not create profile manually: {profile_error}")
-                # We don't fail the registration here, as the trigger might have worked or it might be a permission issue.
-                # But if the trigger failed AND this failed, the user will have issues logging in.
-
+                # If profile creation fails, the user exists in auth but not in our public table.
+                # This is a critical failure. We should delete the auth user to allow them to try again.
+                if supabase_admin:
+                    supabase_admin.auth.admin.delete_user(res.user.id)
+                return False, f"Failed to create user profile. Please try again. Error: {profile_error}"
             return True, "Registration successful! Please check your email to verify your account."
         else:
             return False, "Registration failed. No user object was returned by the server."
@@ -118,6 +113,18 @@ def authenticate_user(username, password):
         return res.session, "Authentication successful"
     except Exception as e:
         return None, f"Authentication failed: {e}"
+
+def send_password_reset_email(email: str):
+    """Sends a password reset email to the user using Supabase Auth."""
+    try:
+        # The public client is sufficient for this. Supabase handles the email sending.
+        supabase.auth.reset_password_for_email(email)
+        # Return a generic success message to prevent email enumeration attacks
+        return True, "If an account with this email exists, a password reset link has been sent."
+    except Exception as e:
+        print(f"Error sending password reset for {email}: {e}")
+        # Also return a generic message on failure
+        return False, "If an account with this email exists, a password reset link has been sent."
 
 def get_user_profile(username):
     """Fetch user profile by username or email."""

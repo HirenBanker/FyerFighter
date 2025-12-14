@@ -42,6 +42,8 @@ if 'show_token_modal' not in st.session_state:
     st.session_state.show_token_modal = False
 if 'regenerate_token' not in st.session_state:
     st.session_state.regenerate_token = False
+if 'show_password_reset' not in st.session_state:
+    st.session_state.show_password_reset = False
 
 # --- Supabase Initialization for Admin Functionality ---
 load_dotenv()
@@ -347,6 +349,11 @@ def show_dashboard():
                             else:
                                 st.error(message)
                 
+                # Add the password reset link below the login form
+                if st.button("Forgot Password?"):
+                    st.session_state.show_password_reset = True
+                    st.rerun()
+
                 with tab2:
                     with st.form("register_form"):
                         reg_username = st.text_input("Username")
@@ -376,10 +383,30 @@ def show_dashboard():
     st.markdown("<hr style='margin-top: 0.5rem; margin-bottom: 1rem;'>", unsafe_allow_html=True)
 
     # --- Row 4: Announcements ---
-    st.subheader("Announcements")
+    st.subheader("Disclaimer: This is a hobby project. Use at your own risk! I am not SEBI registered. I am not responsible for any losses incurred by trading on this platform. Always consult a professional before making investment decisions. Even when it allows you to trade live, be extremely cautious about your trades since this being run on free account, it runs very slow, so actual performance might not be so good. Use it for backtesting and paper trade", help="Disclaimer")
     st.info("This is a placeholder for announcements and advertisements.")
 
 # --- Fyers Token Modals and Initialization ---
+
+@st.dialog("Reset Password")
+def show_password_reset_dialog():
+    """Displays a dialog for the user to enter their email for password reset."""
+    st.write("Please enter your email address to receive a password reset link.")
+    with st.form("password_reset_form"):
+        email = st.text_input("Email")
+        submitted = st.form_submit_button("Send Reset Link")
+
+        if submitted:
+            if email:
+                success, message = auth.send_password_reset_email(email)
+                st.success(message) # Show generic success message regardless of outcome
+                st.session_state.show_password_reset = False
+                st.rerun()
+            else:
+                st.warning("Please enter your email address.")
+    if st.button("Cancel"):
+        st.session_state.show_password_reset = False
+        st.rerun()
 
 @st.dialog("Generate Fyers Token")
 def show_token_generation_dialog(client_id, secret_key):
@@ -461,6 +488,10 @@ def initialize_fyers_client():
         st.session_state.regenerate_token = True
         st.warning("Fyers client initialization failed. Your token may be expired.")
         st.rerun()
+
+# --- Password Reset Dialog ---
+if st.session_state.get("show_password_reset"):
+    show_password_reset_dialog()
 
 # --- Main App Logic ---
 
