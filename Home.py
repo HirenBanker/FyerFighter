@@ -11,6 +11,7 @@ if project_root not in sys.path:
 from app import auth
 from common import login
 import importlib
+import pandas as pd
 from supabase import create_client, Client, PostgrestAPIError
 from dotenv import load_dotenv
 
@@ -358,7 +359,12 @@ def show_dashboard():
                             if reg_password != reg_confirm_password:
                                 st.error("Passwords do not match")
                             else:
-                                success, message = auth.create_user(reg_username, reg_password, email=reg_email, phone=reg_phone)
+                                # The username and phone are metadata for the user profile
+                                user_metadata = {
+                                    'username': reg_username,
+                                    'phone': reg_phone
+                                }
+                                success, message = auth.create_user(reg_email, reg_password, data=user_metadata)
                                 if success:
                                     st.success(message)
                                 else:

@@ -1,0 +1,11 @@
+# Set default behavior to automatically handle text files.
+# This will normalize line endings to LF on commit.
+* text=auto
+
+# Explicitly declare text files you want to always have LF line endings.
+*.py text eol=lf
+*.txt text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.gitignore text eol=lf
+*.env text eol=lf
