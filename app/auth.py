@@ -151,14 +151,17 @@ def create_user(email: str, password: str, data: dict):
 
 def authenticate_user(username, password):
     """Authenticate a user"""
-    users = load_users()
-    if username not in users:
-        return False, "User not found"
-    
-    user = users[username]
-    if verify_password(password, user["password_hash"]):
-        return True, "Authentication successful"
-    return False, "Invalid password"
+    if not supabase:
+        return None, "Supabase client not initialized. Check environment variables."
+
+    try:
+        # Supabase uses email to sign in, not username.
+        # We will use the 'username' field from the login form as the email.
+        res = supabase.auth.sign_in_with_password({"email": username, "password": password})
+        # On success, res contains the user session.
+        return res.session, "Authentication successful"
+    except Exception as e:
+        return None, f"Authentication failed: {e}"
 
 def save_api_credentials(username, api_id, api_secret):
     """Encrypt and save user's API credentials."""
