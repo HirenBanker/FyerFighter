@@ -1,6 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import datetime
+from urllib.parse import urlparse, parse_qs
 import re
 import os
 import sys
@@ -20,37 +21,6 @@ from common import login
 # --- Page Config (MUST be the first Streamlit command) ---
 st.set_page_config(page_title="Fyer Fighter", layout="wide")
 
-# --- Simplified Password Reset Workflow ---
-# Thanks to `redirect.html`, the access_token from Supabase's email link
-# arrives directly as a query parameter that Streamlit can read.
-access_token = st.query_params.get("access_token")
-
-# If a token is found, we display the password reset form and stop the rest of the app
-if access_token:
-    st.title("🔑 Reset Your Password")
-    with st.form("reset_password_form"):
-        new_password = st.text_input("Enter your new password", type="password", key="new_password")
-        confirm_password = st.text_input("Confirm your new password", type="password", key="confirm_password")
-        submitted = st.form_submit_button("Reset Password")
-
-        if submitted:
-            if not new_password or not confirm_password:
-                st.error("Please fill out both password fields.")
-            elif new_password != confirm_password:
-                st.error("The new passwords do not match.")
-            else:
-                # Call the function from auth.py to update the password
-                success, message = auth.reset_password_with_token(access_token, new_password)
-                if success:
-                    st.success(message)
-                    st.info("You can now close this tab and log in with your new password.")
-                    # Stop execution to prevent the main app from showing.
-                    st.stop()
-                else:
-                    st.error(message)
-
-    # Stop the rest of your app from running to prevent showing the login page
-    st.stop()
 # --- Your Regular App Logic (Login Page, Dashboard, etc.) Continues Below ---
 
 # Reduce the default top padding of the page
@@ -79,6 +49,8 @@ if 'regenerate_token' not in st.session_state:
     st.session_state.regenerate_token = False
 if 'show_password_reset' not in st.session_state:
     st.session_state.show_password_reset = False
+if 'password_reset_step' not in st.session_state:
+    st.session_state.password_reset_step = 1 # Step 1: Enter email, Step 2: Enter token
 
 # --- Supabase Initialization for Admin Functionality ---
 load_dotenv()
@@ -424,24 +396,62 @@ def show_dashboard():
 
 # --- Fyers Token Modals and Initialization ---
 
-@st.dialog("Reset Password")
+@st.dialog("🔑 Reset Password")
 def show_password_reset_dialog():
-    """Displays a dialog for the user to enter their email for password reset."""
-    st.write("Please enter your email address to receive a password reset link.")
-    with st.form("password_reset_form"):
-        email = st.text_input("Email")
-        submitted = st.form_submit_button("Send Reset Link")
+    """Manages the multi-step password reset flow within a single dialog."""
+    
+    # Step 1: User enters their email to get the reset link
+    if st.session_state.password_reset_step == 1:
+        st.write("Please enter your email address to receive a password reset link.")
+        with st.form("send_reset_link_form"):
+            email = st.text_input("Email")
+            submitted = st.form_submit_button("Send Reset Link")
 
-        if submitted:
-            if email:
-                success, message = auth.send_password_reset_email(email)
-                st.success(message) # Show generic success message regardless of outcome
-                st.session_state.show_password_reset = False
-                st.rerun()
-            else:
-                st.warning("Please enter your email address.")
+            if submitted:
+                if email:
+                    success, message = auth.send_password_reset_email(email)
+                    st.success(message)
+                    if success:
+                        # Move to the next step
+                        st.session_state.password_reset_step = 2
+                        st.rerun()
+                else:
+                    st.warning("Please enter your email address.")
+
+    # Step 2: User pastes the token and enters a new password
+    elif st.session_state.password_reset_step == 2:
+        st.info("Check your email and click the reset link. From the URL in your browser, copy the long 'access_token' value and paste it below.")
+        with st.form("paste_token_form"):
+            # The token from Supabase is a long string (JWT), not just 8 digits.
+            token = st.text_area("Paste the token from the URL here")
+            new_password = st.text_input("New Password", type="password")
+            confirm_password = st.text_input("Confirm New Password", type="password")
+            submitted = st.form_submit_button("Reset Password")
+
+            if submitted:
+                if not all([token, new_password, confirm_password]):
+                    st.error("Please fill all fields.")
+                elif new_password != confirm_password:
+                    st.error("Passwords do not match.")
+                else:
+                    try:
+                        # The user pastes only the token value, no parsing needed.
+                        # We pass this directly to the auth function.
+                        success, message = auth.reset_password_with_token(token, new_password)
+                        if success:
+                            st.success(message)
+                            # Reset and close the dialog
+                            st.session_state.show_password_reset = False
+                            st.rerun()
+                        else:
+                            st.error(message)
+                    except Exception as e:
+                        st.error(f"An error occurred. The token may be invalid or expired. Error: {e}")
+
+    # Cancel button to exit the flow
     if st.button("Cancel"):
         st.session_state.show_password_reset = False
+        st.session_state.password_reset_step = 1 # Reset for next time
         st.rerun()
 
 @st.dialog("Generate Fyers Token")
