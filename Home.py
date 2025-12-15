@@ -1,20 +1,27 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import datetime
 import re
 import os
 import sys
 import importlib
 import pandas as pd
+from supabase import create_client, Client, PostgrestAPIError
+from dotenv import load_dotenv
+
 # Add the project root to the Python path BEFORE imports
 project_root = os.path.dirname(os.path.abspath(__file__))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
-    
-import streamlit as st
-import streamlit.components.v1 as components
-from app import auth # Ensure your auth module is imported
+
+from app import auth
+from common import login
+
+# --- Page Config (MUST be the first Streamlit command) ---
+st.set_page_config(page_title="Fyer Fighter", layout="wide")
 
 # --- Password Reset Workflow ---
+# This logic MUST run at the absolute top of the script to intercept the reset token.
 
 # This invisible component uses JavaScript to get the access_token from the URL fragment (#)
 # and re-runs the app with it as a query parameter (?). This is the standard way
@@ -61,15 +68,6 @@ if access_token:
     st.stop()
 
 # --- Your Regular App Logic (Login Page, Dashboard, etc.) Continues Below ---
-
-
-from app import auth
-from common import login
-from supabase import create_client, Client, PostgrestAPIError
-from dotenv import load_dotenv
-
-# Page Config
-st.set_page_config(page_title="Fyer Fighter", layout="wide")
 
 # Reduce the default top padding of the page
 st.markdown("""

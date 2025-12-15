@@ -132,11 +132,11 @@ def reset_password_with_token(access_token: str, new_password: str):
     The Supabase client library automatically uses the provided token to authorize this change.
     """
     try:
-        # The supabase-py library uses the user's JWT (the access_token) to perform the update.
-        # We pass it in the update_user call directly.
-        supabase.auth.update_user(
-            {"password": new_password}, jwt=access_token
-        )
+        # First, set the session for the client using the one-time access token from the URL.
+        # The refresh token is not used in this flow but is a required parameter.
+        supabase.auth.set_session(access_token, "dummy_refresh_token")
+        # Now that the client has the user's context, update the user's password.
+        supabase.auth.update_user({"password": new_password})
         return True, "Your password has been successfully updated. You can now log in."
     except Exception as e:
         print(f"Error updating password with token: {e}")
