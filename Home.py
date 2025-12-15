@@ -352,7 +352,8 @@ def show_dashboard():
                                 if success:
                                     st.success(message)
                                     st.session_state.supabase_session = None # Force re-login
-                                st.error(message)
+                                else:
+                                    st.error(message)
                 
                 elif account_option == "Change Email":
                     with st.form("change_email_form"):
