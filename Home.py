@@ -434,7 +434,7 @@ def show_password_reset_dialog():
                     st.error("Passwords do not match.")
                 else:
                     try:
-                        # Parse the access_token and refresh_token from the URL fragment
+                        # 1. Parse the tokens from the URL the user pasted.
                         fragment = urlparse(url).fragment
                         params = parse_qs(fragment)
                         access_token = params.get('access_token', [None])[0]
@@ -442,17 +442,23 @@ def show_password_reset_dialog():
 
                         if not access_token or not refresh_token:
                             st.error("Could not find a valid token in the URL. Please ensure you copied the full URL.")
-                        else:
-                            success, message = auth.reset_password_with_token(access_token, refresh_token, new_password)
-                            if success:
-                                st.success(message)
-                                # Reset and close the dialog
-                                st.session_state.show_password_reset = False
-                                st.rerun()
-                            else:
-                                st.error(message)
+                            st.stop()
+
+                        # 2. Create a NEW, temporary Supabase client instance. This is crucial to avoid
+                        #    interfering with the main app's authenticated session.
+                        temp_supabase_client: Client = create_client(supabase_url, supabase_anon_key)
+
+                        # 3. Set the session on this temporary client using the tokens from the URL.
+                        temp_supabase_client.auth.set_session(access_token, refresh_token)
+
+                        # 4. Use the temporary, now-authenticated client to update the user's password.
+                        temp_supabase_client.auth.update_user({"password": new_password})
+
+                        st.success("Your password has been successfully updated. You can now log in.")
+                        st.session_state.show_password_reset = False
+                        st.rerun()
                     except Exception as e:
-                        st.error(f"An error occurred while parsing the URL. Please ensure it is correct. Error: {e}")
+                        st.error(f"Failed to update password. The reset link may be expired or invalid. Error: {e}")
 
     # Cancel button to exit the flow
     if st.button("Cancel"):
