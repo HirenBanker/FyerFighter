@@ -9,6 +9,59 @@ import pandas as pd
 project_root = os.path.dirname(os.path.abspath(__file__))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
+    
+import streamlit as st
+import streamlit.components.v1 as components
+from app import auth # Ensure your auth module is imported
+
+# --- Password Reset Workflow ---
+
+# This invisible component uses JavaScript to get the access_token from the URL fragment (#)
+# and re-runs the app with it as a query parameter (?). This is the standard way
+# to make URL fragments visible to Streamlit's backend.
+js_code = """
+<script>
+    const params = new URLSearchParams(window.location.hash.substring(1));
+    const accessToken = params.get("access_token");
+    if (accessToken && !window.location.search.includes("access_token")) {
+        window.location.search = `?access_token=${accessToken}`;
+    }
+</script>
+"""
+components.html(js_code, height=0, width=0)
+
+# Check if the access_token is now in the query parameters
+access_token = st.query_params.get("access_token")
+
+# If a token is found, we display the password reset form and stop the rest of the app
+if access_token:
+    st.title("🔑 Reset Your Password")
+    with st.form("reset_password_form"):
+        new_password = st.text_input("Enter your new password", type="password")
+        confirm_password = st.text_input("Confirm your new password", type="password")
+        submitted = st.form_submit_button("Reset Password")
+
+        if submitted:
+            if not new_password or not confirm_password:
+                st.error("Please fill out both password fields.")
+            elif new_password != confirm_password:
+                st.error("Passwords do not match.")
+            else:
+                # Call the new function from auth.py
+                success, message = auth.reset_password_with_token(access_token, new_password)
+                if success:
+                    st.success(message)
+                    st.info("Please refresh the page to go to the login screen.")
+                    # Clear the token from the URL for security
+                    st.query_params.clear()
+                else:
+                    st.error(message)
+    
+    # Stop the rest of your app from running to prevent showing the login page
+    st.stop()
+
+# --- Your Regular App Logic (Login Page, Dashboard, etc.) Continues Below ---
+
 
 from app import auth
 from common import login

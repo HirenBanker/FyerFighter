@@ -126,6 +126,21 @@ def send_password_reset_email(email: str):
         # Also return a generic message on failure
         return False, "If an account with this email exists, a password reset link has been sent."
 
+def reset_password_with_token(access_token: str, new_password: str):
+    """
+    Updates the user's password using the access token from the reset email.
+    The Supabase client library automatically uses the provided token to authorize this change.
+    """
+    try:
+        # The Supabase client needs the session to be set from the access token
+        # before the update_user call can be authenticated.
+        supabase.auth.set_session(access_token, "dummy_refresh_token") # A refresh token is not used but the parameter is expected.
+        supabase.auth.update_user({"password": new_password})
+        return True, "Your password has been successfully updated. You can now log in."
+    except Exception as e:
+        print(f"Error updating password with token: {e}")
+        return False, "Failed to update password. The reset link may be expired or invalid."
+
 def get_user_profile(username):
     """Fetch user profile by username or email."""
     client = get_db_client()
