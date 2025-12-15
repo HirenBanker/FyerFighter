@@ -126,15 +126,13 @@ def send_password_reset_email(email: str):
         # Also return a generic message on failure
         return False, "If an account with this email exists, a password reset link has been sent."
 
-def reset_password_with_token(access_token: str, new_password: str, **kwargs):
+def reset_password_with_token(access_token: str, refresh_token: str, new_password: str):
     """
     Updates the user's password using the access token from the reset email.
     The Supabase client library automatically uses the provided token to authorize this change.
     """
     try:
         # First, set the session for the client using the one-time access token from the URL.
-        # The refresh token is not strictly needed for this flow but the library might expect it.
-        refresh_token = kwargs.get("refresh_token", "dummy_token") # Use a dummy if not provided
         supabase.auth.set_session(access_token, refresh_token)
         # Now that the client has the user's context from the session, update the user's password.
         supabase.auth.update_user({"password": new_password})

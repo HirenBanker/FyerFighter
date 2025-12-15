@@ -420,33 +420,39 @@ def show_password_reset_dialog():
 
     # Step 2: User pastes the token and enters a new password
     elif st.session_state.password_reset_step == 2:
-        st.info("Check your email and click the reset link. From the URL in your browser, copy the long 'access_token' value and paste it below.")
-        with st.form("paste_token_form"):
-            # The token from Supabase is a long string (JWT), not just 8 digits.
-            token = st.text_area("Paste the token from the URL here")
+        st.info("Check your email and click the reset link. You may see a 'Forbidden' page. Copy the entire URL from your browser's address bar and paste it below.")
+        with st.form("paste_url_form"):
+            url = st.text_area("Paste the full URL here")
             new_password = st.text_input("New Password", type="password")
             confirm_password = st.text_input("Confirm New Password", type="password")
             submitted = st.form_submit_button("Reset Password")
 
             if submitted:
-                if not all([token, new_password, confirm_password]):
+                if not all([url, new_password, confirm_password]):
                     st.error("Please fill all fields.")
                 elif new_password != confirm_password:
                     st.error("Passwords do not match.")
                 else:
                     try:
-                        # The user pastes only the token value, no parsing needed.
-                        # We pass this directly to the auth function.
-                        success, message = auth.reset_password_with_token(token, new_password)
-                        if success:
-                            st.success(message)
-                            # Reset and close the dialog
-                            st.session_state.show_password_reset = False
-                            st.rerun()
+                        # Parse the access_token and refresh_token from the URL fragment
+                        fragment = urlparse(url).fragment
+                        params = parse_qs(fragment)
+                        access_token = params.get('access_token', [None])[0]
+                        refresh_token = params.get('refresh_token', [None])[0]
+
+                        if not access_token or not refresh_token:
+                            st.error("Could not find a valid token in the URL. Please ensure you copied the full URL.")
                         else:
-                            st.error(message)
+                            success, message = auth.reset_password_with_token(access_token, refresh_token, new_password)
+                            if success:
+                                st.success(message)
+                                # Reset and close the dialog
+                                st.session_state.show_password_reset = False
+                                st.rerun()
+                            else:
+                                st.error(message)
                     except Exception as e:
-                        st.error(f"An error occurred. The token may be invalid or expired. Error: {e}")
+                        st.error(f"An error occurred while parsing the URL. Please ensure it is correct. Error: {e}")
 
     # Cancel button to exit the flow
     if st.button("Cancel"):
