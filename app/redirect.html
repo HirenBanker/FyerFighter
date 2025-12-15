@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Redirecting...</title>
+    <style>
+        body { font-family: sans-serif; background-color: #0E1117; color: #FAFAFA; text-align: center; padding-top: 50px; }
+    </style>
+</head>
+<body>
+    <p>Please wait, you are being redirected...</p>
+    <script>
+        // This script runs in the browser when this page is loaded.
+        // It grabs the access_token from the URL fragment (#) provided by Supabase.
+        const hash = window.location.hash;
+        if (hash) {
+            // It then immediately replaces the current page with the main application URL,
+            // but with the token correctly placed in the query parameters (?), which Streamlit can read.
+            const params = new URLSearchParams(hash.substring(1));
+            window.location.replace(`/?${params.toString()}`); // Assumes Streamlit is at the root URL.
+        }
+    </script>
+</body>
+</html>

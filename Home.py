@@ -20,70 +20,37 @@ from common import login
 # --- Page Config (MUST be the first Streamlit command) ---
 st.set_page_config(page_title="Fyer Fighter", layout="wide")
 
-# --- Password Reset Workflow ---
-# This logic MUST run at the absolute top of the script to intercept the reset token.
-
-# This component uses JavaScript to detect the presence of a URL fragment (#) containing
-# an access_token. If found, it sets a session state flag and reloads the page with the
-# token as a query parameter (?), which the Streamlit backend can read.
-js_code = """
-<script>
-    // This code runs in the browser.
-    const hash = window.location.hash;
-    if (hash && hash.includes("access_token") && !window.location.search.includes("access_token")) {
-        // Set a flag in session storage to indicate we are in a reset flow.
-        sessionStorage.setItem('waiting_for_reset', 'true');
-        // Move token from hash to query param and reload.
-        const params = new URLSearchParams(hash.substring(1));
-        window.location.search = `?${params.toString()}`;
-    }
-</script>
-"""
-components.html(js_code, height=0, width=0)
-
-# Initialize session state for the reset flow
-if 'waiting_for_reset' not in st.session_state:
-    st.session_state.waiting_for_reset = False
-
-# Check if the access_token is now in the query parameters
+# --- Simplified Password Reset Workflow ---
+# Thanks to `redirect.html`, the access_token from Supabase's email link
+# arrives directly as a query parameter that Streamlit can read.
 access_token = st.query_params.get("access_token")
 
 # If a token is found, we display the password reset form and stop the rest of the app
 if access_token:
     st.title("🔑 Reset Your Password")
     with st.form("reset_password_form"):
-        new_password = st.text_input("Enter your new password", type="password")
-        confirm_password = st.text_input("Confirm your new password", type="password")
+        new_password = st.text_input("Enter your new password", type="password", key="new_password")
+        confirm_password = st.text_input("Confirm your new password", type="password", key="confirm_password")
         submitted = st.form_submit_button("Reset Password")
 
         if submitted:
             if not new_password or not confirm_password:
                 st.error("Please fill out both password fields.")
             elif new_password != confirm_password:
-                st.error("Passwords do not match.")
+                st.error("The new passwords do not match.")
             else:
-                # Call the new function from auth.py
+                # Call the function from auth.py to update the password
                 success, message = auth.reset_password_with_token(access_token, new_password)
                 if success:
                     st.success(message)
-                    st.info("Please refresh the page to go to the login screen.")
-                    # Clear the token from the URL for security
-                    st.query_params.clear()
+                    st.info("You can now close this tab and log in with your new password.")
+                    # Stop execution to prevent the main app from showing.
+                    st.stop()
                 else:
                     st.error(message)
-    
+
     # Stop the rest of your app from running to prevent showing the login page
     st.stop()
-
-# If the JS has set the session storage flag, it means we are waiting for the reload.
-# Show a waiting message to prevent the main app from loading momentarily.
-if not access_token and 'waiting_for_reset' not in st.session_state:
-    # This is a trick to check the browser's session storage.
-    # We can't read it directly, but we can run JS that sets a flag if it exists.
-    components.html("<script>sessionStorage.getItem('waiting_for_reset') && sessionStorage.removeItem('waiting_for_reset') && window.parent.document.body.dispatchEvent(new CustomEvent('streamlit:setSessionState', { detail: { 'waiting_for_reset': true } }))</script>", height=0)
-    if st.session_state.waiting_for_reset:
-        st.info("Please wait...")
-        st.stop()
 # --- Your Regular App Logic (Login Page, Dashboard, etc.) Continues Below ---
 
 # Reduce the default top padding of the page
