@@ -23,19 +23,27 @@ st.set_page_config(page_title="Fyer Fighter", layout="wide")
 # --- Password Reset Workflow ---
 # This logic MUST run at the absolute top of the script to intercept the reset token.
 
-# This invisible component uses JavaScript to get the access_token from the URL fragment (#)
-# and re-runs the app with it as a query parameter (?). This is the standard way
-# to make URL fragments visible to Streamlit's backend.
+# This component uses JavaScript to detect the presence of a URL fragment (#) containing
+# an access_token. If found, it sets a session state flag and reloads the page with the
+# token as a query parameter (?), which the Streamlit backend can read.
 js_code = """
 <script>
-    const params = new URLSearchParams(window.location.hash.substring(1));
-    const accessToken = params.get("access_token");
-    if (accessToken && !window.location.search.includes("access_token")) {
-        window.location.search = `?access_token=${accessToken}`;
+    // This code runs in the browser.
+    const hash = window.location.hash;
+    if (hash && hash.includes("access_token") && !window.location.search.includes("access_token")) {
+        // Set a flag in session storage to indicate we are in a reset flow.
+        sessionStorage.setItem('waiting_for_reset', 'true');
+        // Move token from hash to query param and reload.
+        const params = new URLSearchParams(hash.substring(1));
+        window.location.search = `?${params.toString()}`;
     }
 </script>
 """
 components.html(js_code, height=0, width=0)
+
+# Initialize session state for the reset flow
+if 'waiting_for_reset' not in st.session_state:
+    st.session_state.waiting_for_reset = False
 
 # Check if the access_token is now in the query parameters
 access_token = st.query_params.get("access_token")
@@ -67,6 +75,15 @@ if access_token:
     # Stop the rest of your app from running to prevent showing the login page
     st.stop()
 
+# If the JS has set the session storage flag, it means we are waiting for the reload.
+# Show a waiting message to prevent the main app from loading momentarily.
+if not access_token and 'waiting_for_reset' not in st.session_state:
+    # This is a trick to check the browser's session storage.
+    # We can't read it directly, but we can run JS that sets a flag if it exists.
+    components.html("<script>sessionStorage.getItem('waiting_for_reset') && sessionStorage.removeItem('waiting_for_reset') && window.parent.document.body.dispatchEvent(new CustomEvent('streamlit:setSessionState', { detail: { 'waiting_for_reset': true } }))</script>", height=0)
+    if st.session_state.waiting_for_reset:
+        st.info("Please wait...")
+        st.stop()
 # --- Your Regular App Logic (Login Page, Dashboard, etc.) Continues Below ---
 
 # Reduce the default top padding of the page
